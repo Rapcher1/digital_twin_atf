@@ -3708,8 +3708,8 @@ llm_client = UniversalLLMClient(
 )
 
 # Uncomment once LLM_API_KEY above is filled in:
-# response = twin.ask_llm(llm_client, current_activity=1)
-# print("\nLLM response:\n", response)
+response = twin.ask_llm(llm_client, current_activity=1)
+print("\nLLM response:\n", response)
 
 # ============================================================
 # 8. GROQ CLIENT: TWO-TURN CONVERSATION + TOKEN METER
