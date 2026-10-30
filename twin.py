@@ -170,7 +170,7 @@ class UniversalLLMClient:
 
 
 
-MODEL_NAME = "llama3.3"  # default model — change if your provider lists a different exact string
+MODEL_NAME = "llama-3.3-70b-versatile"  # default model — change if your provider lists a different exact string
 
 class GroqClient:
     """
@@ -3696,9 +3696,9 @@ print("\n=== SYSTEM INSTRUCTION BUILT FROM TWIN DATA ===")
 print(twin.build_system_instruction())
 
 # -------- PUT YOUR API CREDENTIALS HERE --------
-LLM_BASE_URL = "https://api.groq.com/openai/v1"   # <-- change to your provider's base URL
-LLM_API_KEY = "PASTE_YOUR_API_KEY_HERE"            # <-- your key goes here
-LLM_MODEL = "llama3.3"                              # <-- exact model string from your provider
+LLM_BASE_URL = "https://api.groq.com/openai/v1/chat/completions"   # <-- change to your provider's base URL
+LLM_API_KEY = "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"            # <-- your key goes here
+LLM_MODEL = "llama-3.3-70b-versatile"                              # <-- exact model string from your provider
 # ------------------------------------------------
 
 llm_client = UniversalLLMClient(
@@ -3716,25 +3716,25 @@ llm_client = UniversalLLMClient(
 # ============================================================
 
 # -------- PUT YOUR GROQ API KEY HERE --------
-GROQ_API_KEY = "PASTE_YOUR_API_KEY_HERE"   # <-- your Groq key goes here
+GROQ_API_KEY = "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"   # <-- your Groq key goes here
 # ---------------------------------------------
 
 groq_client = GroqClient(api_key=GROQ_API_KEY, model=MODEL_NAME)
 
 # Uncomment the block below once GROQ_API_KEY above is filled in:
 
-# Turn 1 — opens the conversation (system instruction is sent automatically, once)
-# reply1, usage1 = twin.chat_with_twin(groq_client, "Hello! I'm testing my digital twin's connection to you.")
-# print("Turn 1 reply:", reply1)
-# print("Tokens used this call:", usage1.get("total_tokens"))
+Turn 1 — opens the conversation (system instruction is sent automatically, once)
+reply1, usage1 = twin.chat_with_twin(groq_client, "Hello! I'm testing my digital twin's connection to you.")
+print("Turn 1 reply:", reply1)
+print("Tokens used this call:", usage1.get("total_tokens"))
 
-# Turn 2 — continues the SAME conversation (history remembered automatically)
-# reply2, usage2 = twin.chat_with_twin(groq_client, "Based on what you know about my patterns, what should I do next?")
-# print("\nTurn 2 reply:", reply2)
-# print("Tokens used this call:", usage2.get("total_tokens"))
+Turn 2 — continues the SAME conversation (history remembered automatically)
+reply2, usage2 = twin.chat_with_twin(groq_client, "Based on what you know about my patterns, what should I do next?")
+print("\nTurn 2 reply:", reply2)
+print("Tokens used this call:", usage2.get("total_tokens"))
 
-# API meter — total tokens across both calls
-# print("\nTotal tokens used so far:", groq_client.total_tokens_used)
+API meter — total tokens across both calls
+print("\nTotal tokens used so far:", groq_client.total_tokens_used)
 
 # ============================================================
 # 9. TEXT PROCESSING / RAG: INGEST REAL, MESSY NOTES
@@ -3971,10 +3971,10 @@ print("  twin.chat_with_twin(managed_client, 'Hello!')  # automatically trimmed 
 print("  twin.show_context_status(managed_client)       # see current usage at a glance")
 
 # Uncomment with a real GROQ_API_KEY (see Section 8) to see it live:
-# managed_client = GroqClient(api_key=GROQ_API_KEY, model=MODEL_NAME, context_manager=twin.context_manager)
-# reply, usage = twin.chat_with_twin(managed_client, "Hello! Let's talk about my week.")
-# print(reply)
-# twin.show_context_status(managed_client)
+managed_client = GroqClient(api_key=GROQ_API_KEY, model=MODEL_NAME, context_manager=twin.context_manager)
+reply, usage = twin.chat_with_twin(managed_client, "Hello! Let's talk about my week.")
+print(reply)
+twin.show_context_status(managed_client)
 
 # ============================================================
 # 12. WORD EMBEDDINGS: WORD2VEC AND GLOVE INTERNALS
