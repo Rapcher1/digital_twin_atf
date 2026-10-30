@@ -83,6 +83,18 @@ class UniversalLLMClient:
         }
 
     def chat(self, system_instruction, user_prompt, temperature=0.3, max_tokens=300, context_strategy="sliding_window"):
+        state = safety.check_request(user_message, context=system_instruction or "chat")
+        if state["blocked"]:
+            return "Request blocked for safety reasons.", {"blocked": True, "safety": state}
+
+        user_message = safety.redact_input(user_message)
+
+        if system_instruction and not self.conversation_history:
+            self.conversation_history.append({"role": "system", "content": system_instruction})
+
+        self.conversation_history.append({"role": "user", "content": user_message})
+        
+        
         if self.context_manager is not None:
             messages = self.context_manager.fit_to_budget(
                 system_instruction, [{"role": "user", "content": user_prompt}], strategy=context_strategy)
