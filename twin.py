@@ -11,6 +11,8 @@ from typing import Any, Callable, List, Dict, get_type_hints
 from datetime import datetime
 from digital_twin_safety import DigitalTwinSafetySystem
 
+safety = DigitalTwinSafetySystem()
+
 activity_names = {0: 'Sleep', 1: 'Work', 2: 'Exercise', 3: 'Social', 4: 'Leisure'}
 
 def sigmoid(x):
