@@ -1,5 +1,8 @@
 import json
 import os
+import uuid
+from datetime import datetime
+
 import streamlit as st
 
 try:
@@ -29,53 +32,60 @@ except Exception:
     GroqClient = None
     ContextWindowManager = None
 
+from data_fetcher import fetch_web_summary
 
-st.set_page_config(page_title="Digital Twin Assistant", page_icon="🩺", layout="wide")
+
+st.set_page_config(page_title="Digital Twin Workspace", page_icon="🧠", layout="wide")
+
 
 # ---------------------------------
-# Safety system used by app
+# Safety system
 # ---------------------------------
 safety = DigitalTwinSafetySystem()
 
 
 # ---------------------------------
-# System prompt helpers
+# Core utility functions
 # ---------------------------------
-@st.cache_data
-def get_default_system_prompt(language: str, profile_name: str):
+def get_default_system_prompt(language: str, profile_name: str, topic: str = "general"):
     if language == "sw":
         return (
-            f"You are {profile_name}, a compassionate African digital health assistant. "
-            "Respond in Swahili and English when helpful. Give safe, practical, and empathetic advice. "
-            "Ask clarifying questions before suggesting treatment. Do not diagnose. Use a calm tone."
+            f"You are {profile_name}, a helpful African digital twin assistant. "
+            f"You are currently helping in the topic: {topic}. "
+            "Respond in Swahili and English when useful. Give safe, practical, and empathetic advice. "
+            "Ask clarifying questions when needed. Never diagnose. Use a calm and supportive tone."
         )
     return (
-        f"You are {profile_name}, a compassionate African digital health assistant. "
+        f"You are {profile_name}, a helpful African digital twin assistant. "
+        f"You are currently helping in the topic: {topic}. "
         "Respond in English, and if helpful, include brief Swahili phrases. "
-        "Give safe, practical, and empathetic guidance. Ask clarifying questions before suggesting treatment. "
-        "Do not diagnose. Use a calm tone."
+        "Give safe, practical, and empathetic guidance. Ask clarifying questions when needed. "
+        "Never diagnose. Use a calm and supportive tone."
     )
 
 
 # ---------------------------------
-# Real twin integration
+# Real model integration
 # ---------------------------------
 def get_twin_client():
     if not USE_REAL_TWIN:
         return None
 
-    cm = ContextWindowManager(max_tokens=8192, reserve_for_response=512)
-    return GroqClient(
-        api_key=os.environ.get("GROQ_API_KEY", ""),
-        model="llama3.3",
-        context_manager=cm,
-    )
+    try:
+        cm = ContextWindowManager(max_tokens=8192, reserve_for_response=512)
+        return GroqClient(
+            api_key=os.environ.get("GROQ_API_KEY", ""),
+            model="llama3.3",
+            context_manager=cm,
+        )
+    except Exception:
+        return None
 
 
 # ---------------------------------
-# Fallback local logic for offline use
+# Offline fallback logic
 # ---------------------------------
-def local_twin_response(user_input: str, language: str = "en", profile_name: str = "Aster"):
+def local_twin_response(user_input: str, language: str = "en", profile_name: str = "Aster", topic: str = "general"):
     text = (user_input or "").strip()
     if not text:
         return "How can I help you today?"
@@ -116,25 +126,61 @@ def local_twin_response(user_input: str, language: str = "en", profile_name: str
             "If you feel at risk of harming yourself or someone else, contact emergency services or a crisis hotline immediately."
         )
 
+    if any(word in lower for word in ["weather", "rain", "forecast", "temperature", "climate", "market", "price", "harvest", "farming", "soil"]):
+        if language == "sw":
+            return (
+                "Kwa maswali ya kilimo au hali ya hewa, angalia taarifa za karibu na eneo lako. "
+                "Vifaa vya kilimo vinaweza kuonyesha mvua, udongo na wakati wa kupanda au kuvuna. "
+                "Kama unahitaji, niweza kukusaidia kuangalia hatua za msingi za kilimo kwa mazingira ya eneo lako."
+            )
+        return (
+            "For agricultural or weather questions, check local forecasts and field conditions in your area first. "
+            "I can help you reason through planting, watering, pest management, and local seasonal patterns."
+        )
+
     if language == "sw":
         return (
-            f"Nimeelewa. Nitakusaidia kwa njia inayolenga afya yako, usalama, na hatua zinazofaa. "
-            f"Tafadhali niambie zaidi kuhusu dalili zako, muda wa kutokea, na kile unachotaka kutatua."
+            f"Nimeelewa. Nitakusaidia kwa njia inayolenga {topic} na afya yako kwa ujumla. "
+            f"Tafadhali niambie zaidi kuhusu hali yako, dalili zako, au jambo la kutaka kujadili."
         )
     return (
-        f"I understand. I can help you think through your symptoms, concerns, and next practical steps. "
-        f"Please share a little more detail about what is happening and how long it has been going on."
+        f"I understand. I can help with the topic of {topic} and your broader wellbeing. "
+        f"Please share a little more detail about what is happening and what you need help with."
     )
 
 
 # ---------------------------------
-# Real answer generation with safety checks
+# Context fetcher for live information
 # ---------------------------------
-def generate_answer(user_input: str, language: str = "en", profile_name: str = "Aster"):
+def build_external_context(user_input: str, topic: str):
+    text = (user_input or "").strip()
+    if not text:
+        return ""
+
+    keywords = [
+        "weather", "forecast", "market", "price", "latest", "today", "news", "current",
+        "malaria", "health", "disease", "agriculture", "farming", "policy",
+    ]
+    if not any(k in text.lower() for k in keywords):
+        return ""
+
+    try:
+        result = fetch_web_summary(f"{topic} {text}")
+        if not result:
+            return ""
+        return result[:800]
+    except Exception:
+        return ""
+
+
+# ---------------------------------
+# Main answer generator
+# ---------------------------------
+def generate_answer(user_input: str, language: str, profile_name: str, topic: str, chat_messages=None):
     if not user_input or not user_input.strip():
         return "Please type your message so I can help.", {"blocked": False, "reasons": []}
 
-    safe_state = safety.check_request(user_input, context="digital twin assistant")
+    safe_state = safety.check_request(user_input, context=f"{topic} conversation")
     if safe_state["blocked"]:
         response = (
             "I can't assist with that request. If this is a safety issue, contact emergency services or a local crisis hotline immediately."
@@ -144,12 +190,20 @@ def generate_answer(user_input: str, language: str = "en", profile_name: str = "
         return response, safe_state
 
     cleaned_input = safety.redact_input(user_input)
+    external_context = build_external_context(cleaned_input, topic)
+
     client = get_twin_client()
     api_key = os.environ.get("GROQ_API_KEY", "")
 
     if client is not None and api_key:
         try:
-            system_instruction = get_default_system_prompt(language, profile_name)
+            system_instruction = get_default_system_prompt(language, profile_name, topic)
+            if external_context:
+                system_instruction += (
+                    "\n\nFresh external context (use only when relevant and clearly labeled):\n"
+                    f"{external_context}"
+                )
+
             reply, usage = client.chat(
                 cleaned_input,
                 system_instruction=system_instruction,
@@ -158,7 +212,7 @@ def generate_answer(user_input: str, language: str = "en", profile_name: str = "
                 context_strategy="sliding_window",
             )
 
-            validation = safety.validate_output(reply, context="digital twin assistant")
+            validation = safety.validate_output(reply, context=f"{topic} conversation")
             if not validation["valid"]:
                 reply = "I can help with general wellness guidance and safe next steps. Please share more detail about your symptoms."
 
@@ -166,42 +220,70 @@ def generate_answer(user_input: str, language: str = "en", profile_name: str = "
         except Exception:
             pass
 
-    # graceful fallback if real model is unavailable
-    reply = local_twin_response(cleaned_input, language=language, profile_name=profile_name)
-    validation = safety.validate_output(reply, context="digital twin assistant")
+    fallback = local_twin_response(cleaned_input, language=language, profile_name=profile_name, topic=topic)
+    validation = safety.validate_output(fallback, context=f"{topic} conversation")
     if not validation["valid"]:
-        reply = "I can help with general wellness guidance and safe next steps. Please share more detail about your symptoms."
-    return reply, safe_state
+        fallback = "I can help with general wellness guidance and safe next steps. Please share more detail about your symptoms."
+    return fallback, safe_state
 
 
 # ---------------------------------
-# UI / theme / app shell
+# Session state chat management
 # ---------------------------------
+def default_chat_payload(title="General health", topic="health"):
+    return {
+        "id": f"chat-{uuid.uuid4().hex[:8]}",
+        "title": title,
+        "topic": topic,
+        "messages": [{"role": "assistant", "content": "Hello! I am your digital twin assistant. How can I help you today?"}],
+        "updated_at": datetime.now().isoformat(),
+    }
 
-def set_theme(theme_name: str):
-    st.session_state.theme = theme_name
+
+def init_session():
+    if "chats" not in st.session_state:
+        st.session_state.chats = {
+            "chat-1": {
+                "id": "chat-1",
+                "title": "General health",
+                "topic": "health",
+                "messages": [{"role": "assistant", "content": "Hello! I am your digital twin assistant. Ask me about symptoms, routines, or next steps."}],
+                "updated_at": datetime.now().isoformat(),
+            }
+        }
+
+    if "active_chat_id" not in st.session_state:
+        st.session_state.active_chat_id = "chat-1"
+
+    if "language" not in st.session_state:
+        st.session_state.language = "en"
+
+    if "profile_name" not in st.session_state:
+        st.session_state.profile_name = "Aster"
+
+    if "theme" not in st.session_state:
+        st.session_state.theme = "light"
+
+    if "twin_clients" not in st.session_state:
+        st.session_state.twin_clients = {}
 
 
-st.set_page_config(page_title="Digital Twin Assistant", page_icon="🩺", layout="wide")
+init_session()
 
 
+# ---------------------------------
+# UI theme
+# ---------------------------------
 def apply_theme(theme_name: str):
     if theme_name == "dark":
         st.markdown(
             """
             <style>
             .stApp { background: #0f172a; color: #e2e8f0; }
-            .stChatMessage { background: #111827; }
             div[data-testid=stSidebar] { background: #111827; }
-            .metric-container { background: #1f2937; padding: 14px; border-radius: 12px; }
+            .chat-card { background: #111827; border-radius: 12px; padding: 12px; border: 1px solid #334155; }
             .safe-box { background: #0b1120; border: 1px solid #334155; border-radius: 10px; padding: 12px; }
-            .quick-action-button {
-                width: 100% !important;
-                min-height: 48px;
-                border-radius: 12px;
-                margin: 4px 0;
-                font-weight: 600;
-            }
+            .sidebar-button { width: 100%; text-align: left; }
             </style>
             """,
             unsafe_allow_html=True,
@@ -211,84 +293,77 @@ def apply_theme(theme_name: str):
             """
             <style>
             .stApp { background: #f8fafc; color: #0f172a; }
-            .stChatMessage { background: #ffffff; }
             div[data-testid=stSidebar] { background: #f1f5f9; }
-            .metric-container { background: #ffffff; padding: 14px; border-radius: 12px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08); }
+            .chat-card { background: white; border-radius: 12px; padding: 12px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08); }
             .safe-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; }
-            .quick-action-button {
-                width: 100% !important;
-                min-height: 48px;
-                border-radius: 12px;
-                margin: 4px 0;
-                font-weight: 600;
-            }
+            .sidebar-button { width: 100%; text-align: left; }
             </style>
             """,
             unsafe_allow_html=True,
         )
 
 
-def init_session():
-    if "messages" not in st.session_state:
-        st.session_state.messages = [{
-            "role": "assistant",
-            "content": "Hello! I am your digital twin health assistant. Ask me about symptoms, routines, or next steps.",
-        }]
-    if "language" not in st.session_state:
-        st.session_state.language = "en"
-    if "profile_name" not in st.session_state:
-        st.session_state.profile_name = "Aster"
-    if "theme" not in st.session_state:
-        st.session_state.theme = "light"
-    if "usage_count" not in st.session_state:
-        st.session_state.usage_count = 0
-    if "pending_quick_action" not in st.session_state:
-        st.session_state.pending_quick_action = ""
-
-
-init_session()
 apply_theme(st.session_state.theme)
 
-with st.sidebar:
-    st.title("🩺 Digital Twin")
-    st.caption("African healthcare companion")
 
+# ---------------------------------
+# Sidebar / chat selection
+# ---------------------------------
+with st.sidebar:
+    st.title("🧠 Twin Workspace")
+    st.caption("Multi-session digital twin")
+
+    if st.button("+ New chat", use_container_width=True):
+        new_id = f"chat-{uuid.uuid4().hex[:8]}"
+        st.session_state.chats[new_id] = default_chat_payload(title="New conversation", topic="general")
+        st.session_state.active_chat_id = new_id
+        st.rerun()
+
+    st.markdown("### Conversations")
+    for chat_id, chat in st.session_state.chats.items():
+        active = chat_id == st.session_state.active_chat_id
+        button_label = f"{chat['title']} • {chat['topic']}"
+        if st.button(button_label, key=f"sidebar_{chat_id}", use_container_width=True, type="primary" if active else "secondary"):
+            st.session_state.active_chat_id = chat_id
+            st.rerun()
+
+    st.markdown("---")
     st.selectbox("Language", ["en", "sw"], index=0 if st.session_state.language == "en" else 1, key="language")
     st.text_input("Twin profile name", key="profile_name")
     st.radio("Theme", ["light", "dark"], index=0 if st.session_state.theme == "light" else 1, key="theme")
 
-    st.markdown("### Safety Status")
-    st.info("PII scanning, rate limiting, prompt-injection detection, content filtering and output validation are enabled.")
-
-    with st.expander("Usage statistics"):
-        c1, c2 = st.columns(2)
-        c1.metric("Messages", len(st.session_state.messages))
-        c2.metric("Safety checks", st.session_state.usage_count)
+    with st.expander("Session settings"):
+        st.text_input("Current topic", key="topic_override")
+        if st.button("Apply topic", use_container_width=True):
+            chat = st.session_state.chats[st.session_state.active_chat_id]
+            chat["topic"] = st.session_state.topic_override.strip() or chat["topic"]
+            chat["title"] = (chat["title"] or "New conversation")
+            st.rerun()
 
     st.download_button(
-        "Export chat",
-        data=json.dumps(st.session_state.messages, ensure_ascii=False, indent=2),
-        file_name="digital_twin_chat.json",
+        "Export all chats",
+        data=json.dumps(st.session_state.chats, ensure_ascii=False, indent=2),
+        file_name="digital_twin_chats.json",
         mime="application/json",
     )
 
-    if st.button("Clear chat"):
-        st.session_state.messages = [{"role": "assistant", "content": "Chat cleared. How can I help you today?"}]
-        st.rerun()
+
+# ---------------------------------
+# Active chat view
+# ---------------------------------
+active_chat = st.session_state.chats[st.session_state.active_chat_id]
 
 header_col1, header_col2 = st.columns([3, 1])
 with header_col1:
-    st.title(f"{st.session_state.profile_name} Twin Assistant")
+    st.title(f"{active_chat['title']}")
 with header_col2:
-    st.markdown("<div class='safe-box'>🛡️ Safety mode active</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='safe-box'>Topic: {active_chat['topic']}</div>", unsafe_allow_html=True)
 
-for message in st.session_state.messages:
+for message in active_chat["messages"]:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# ------------------------------
-# Quick action buttons
-# ------------------------------
+# quick actions
 quick_prompts = {
     "en": [
         "I have a fever and headache",
@@ -304,59 +379,59 @@ quick_prompts = {
     ],
 }
 
-if st.session_state.language == "sw":
-    actions = quick_prompts["sw"]
-else:
-    actions = quick_prompts["en"]
-
+actions = quick_prompts[st.session_state.language]
 button_cols = st.columns(2)
 for idx, prompt in enumerate(actions):
     with button_cols[idx % 2]:
-        if st.button(prompt, key=f"quick_{idx}", use_container_width=True):
-            st.session_state.pending_quick_action = prompt
+        if st.button(prompt, key=f"qa_{idx}", use_container_width=True):
+            user_prompt = prompt
+            st.session_state.pending_prompt = user_prompt
             st.rerun()
 
-if st.session_state.pending_quick_action:
-    user_prompt = st.session_state.pending_quick_action
-    st.session_state.pending_quick_action = ""
+if "pending_prompt" in st.session_state and st.session_state.pending_prompt:
+    user_prompt = st.session_state.pending_prompt
+    st.session_state.pending_prompt = ""
 else:
-    user_prompt = st.chat_input("Ask about symptoms, care, or daily wellbeing...")
+    user_prompt = st.chat_input("Ask the twin about this topic...")
 
 if user_prompt:
-    st.session_state.messages.append({"role": "user", "content": user_prompt})
-    st.session_state.usage_count += 1
+    active_chat["messages"].append({"role": "user", "content": user_prompt})
+    active_chat["updated_at"] = datetime.now().isoformat()
 
     with st.spinner("Thinking..."):
         try:
-            answer, safety_state = generate_answer(
+            response, safety_state = generate_answer(
                 user_prompt,
                 language=st.session_state.language,
                 profile_name=st.session_state.profile_name,
+                topic=active_chat["topic"],
+                chat_messages=active_chat["messages"],
             )
         except Exception:
-            answer = "I hit a temporary error while generating a response. Please try a simpler question or ask again in a moment."
+            response = "I hit a temporary error while generating a response. Please try a simpler question or ask again in a moment."
             safety_state = {"blocked": False, "reasons": ["error"]}
 
-    st.session_state.messages.append({"role": "assistant", "content": answer})
+    active_chat["messages"].append({"role": "assistant", "content": response})
+    active_chat["updated_at"] = datetime.now().isoformat()
     st.rerun()
 
+
+# footer and status
 with st.container():
     st.markdown("---")
-    st.caption("Built for mobile-first use, responsive design, safe health guidance, privacy-aware handling, and clear user experience.")
+    st.caption("Multi-chat digital twin with Groq if configured, with safe local fallback and external context support.")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Active chat", active_chat["title"])
+    c2.metric("Topic", active_chat["topic"])
+    c3.metric("Messages", len(active_chat["messages"]))
 
-    bottom_cols = st.columns(4)
-    bottom_cols[0].metric("Status", "Ready")
-    bottom_cols[1].metric("Language", st.session_state.language.upper())
-    bottom_cols[2].metric("Profile", st.session_state.profile_name)
-    bottom_cols[3].metric("Theme", st.session_state.theme.title())
-
-if st.button("🎙️ Voice input"):
-    st.components.v1.html(
-        """
-        <script>
+    if st.button("Voice input", use_container_width=False):
+        st.components.v1.html(
+            """
+            <script>
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
-                alert('Voice input is not supported in this browser.');
+                alert('Voice input is not supported here.');
                 return;
             }
             const recognition = new SpeechRecognition();
@@ -370,9 +445,9 @@ if st.button("🎙️ Voice input"):
                 }
             };
             recognition.start();
-        </script>
-        """,
-        height=120,
-    )
+            </script>
+            """,
+            height=120,
+        )
 
-# Final note: this app uses the real twin logic when available and falls back safely when the model is unavailable.
+# Final app note
