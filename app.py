@@ -1,9 +1,16 @@
 import json
 import os
+import sys
 import uuid
 from datetime import datetime
 
 import streamlit as st
+
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+
 
 try:
     from digital_twin_safety import DigitalTwinSafetySystem
