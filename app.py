@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 import uuid
 from datetime import datetime
@@ -86,12 +87,21 @@ DARK_CSS = """
         background: #0d1724;
         border: 1px solid #1f2f41;
         border-radius: 18px;
-        padding: 10px 12px;
+        padding: 12px 12px 8px;
         box-shadow: 0 4px 18px rgba(0,0,0,0.12);
     }
 
     .message-row {
         margin: 0 0 12px 0;
+        display: flex;
+    }
+
+    .message-row.user {
+        justify-content: flex-end;
+    }
+
+    .message-row.assistant {
+        justify-content: flex-start;
     }
 
     .user-bubble {
@@ -100,7 +110,6 @@ DARK_CSS = """
         border-radius: 18px 18px 6px 18px;
         padding: 12px 14px;
         max-width: 78%;
-        margin-left: auto;
         box-shadow: 0 8px 16px rgba(20, 63, 113, 0.25);
     }
 
@@ -111,7 +120,6 @@ DARK_CSS = """
         border-radius: 18px 18px 18px 6px;
         padding: 12px 14px;
         max-width: 82%;
-        margin-right: auto;
         box-shadow: 0 8px 18px rgba(0,0,0,0.08);
     }
 
@@ -129,6 +137,14 @@ DARK_CSS = """
         display: inline-block;
         font-size: 0.8rem;
         margin-right: 8px;
+    }
+
+    .profile-box {
+        background: #0e1c2b;
+        border: 1px solid #22384e;
+        border-radius: 14px;
+        padding: 12px;
+        margin-bottom: 12px;
     }
 
     .stTextInput > div > div > input,
@@ -194,8 +210,21 @@ LIGHT_CSS = """
         background: #ffffff;
         border: 1px solid #e2ebf5;
         border-radius: 18px;
-        padding: 10px 12px;
+        padding: 12px 12px 8px;
         box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);
+    }
+
+    .message-row {
+        margin: 0 0 12px 0;
+        display: flex;
+    }
+
+    .message-row.user {
+        justify-content: flex-end;
+    }
+
+    .message-row.assistant {
+        justify-content: flex-start;
     }
 
     .user-bubble {
@@ -204,7 +233,6 @@ LIGHT_CSS = """
         border-radius: 18px 18px 6px 18px;
         padding: 12px 14px;
         max-width: 78%;
-        margin-left: auto;
     }
 
     .assistant-bubble {
@@ -214,7 +242,6 @@ LIGHT_CSS = """
         border-radius: 18px 18px 18px 6px;
         padding: 12px 14px;
         max-width: 82%;
-        margin-right: auto;
     }
 
     .meta {
@@ -231,6 +258,14 @@ LIGHT_CSS = """
         display: inline-block;
         font-size: 0.8rem;
         margin-right: 8px;
+    }
+
+    .profile-box {
+        background: #f9fbff;
+        border: 1px solid #e1ebf8;
+        border-radius: 14px;
+        padding: 12px;
+        margin-bottom: 12px;
     }
 
     .stTextInput > div > div > input,
@@ -259,6 +294,16 @@ LIGHT_CSS = """
 </style>
 """
 
+DEFAULT_PROFILE = {
+    "name": "Aster",
+    "persona": "calm, thoughtful, proactive, and grounded",
+    "style": "warm, practical, natural, and collaborative",
+    "goals": [],
+    "preferences": [],
+    "recurring_topics": [],
+    "facts": [],
+}
+
 
 def default_chat_payload(title="New conversation", topic="general"):
     return {
@@ -271,43 +316,114 @@ def default_chat_payload(title="New conversation", topic="general"):
         }],
         "updated_at": datetime.now().isoformat(),
         "memory_summary": "The user is building a digital twin assistant and wants a conversational, human-style experience.",
+        "profile": json.loads(json.dumps(DEFAULT_PROFILE)),
     }
+
+
+def ensure_chat_profile(chat):
+    if "profile" not in chat or not isinstance(chat["profile"], dict):
+        chat["profile"] = json.loads(json.dumps(DEFAULT_PROFILE))
+    for key, default_value in DEFAULT_PROFILE.items():
+        chat["profile"].setdefault(key, default_value)
+    if not isinstance(chat["profile"].get("goals"), list):
+        chat["profile"]["goals"] = []
+    if not isinstance(chat["profile"].get("preferences"), list):
+        chat["profile"]["preferences"] = []
+    if not isinstance(chat["profile"].get("recurring_topics"), list):
+        chat["profile"]["recurring_topics"] = []
+    if not isinstance(chat["profile"].get("facts"), list):
+        chat["profile"]["facts"] = []
+    return chat["profile"]
+
+
+def normalize_text(text):
+    return re.sub(r"\s+", " ", (text or "")).strip()
+
+
+def extract_profile_from_messages(messages):
+    profile = json.loads(json.dumps(DEFAULT_PROFILE))
+    goals = []
+    preferences = []
+    topics = []
+    facts = []
+
+    for msg in messages:
+        if msg.get("role") != "user":
+            continue
+        text = normalize_text(msg.get("content") or "")
+        if not text:
+            continue
+
+        lower = text.lower()
+        if any(k in lower for k in ["goal", "want", "trying to", "need", "focus", "planning", "improve", "build", "launch", "grow", "help me"]):
+            goals.append(text)
+        if any(k in lower for k in ["prefer", "like", "enjoy", "love", "value", "works better", "best for"]):
+            preferences.append(text)
+        if len(text) > 20:
+            facts.append(text)
+
+        # simple topic extraction
+        for topic in [
+            "project", "business", "study", "planning", "research", "career", "product",
+            "strategy", "marketing", "growth", "learning", "work", "personal", "focus"
+        ]:
+            if topic in lower:
+                topics.append(topic)
+
+    profile["goals"] = goals[-4:]
+    profile["preferences"] = preferences[-4:]
+    profile["recurring_topics"] = list(dict.fromkeys(topics[-6:]))
+    profile["facts"] = facts[-5:]
+
+    if not profile["goals"]:
+        profile["goals"] = ["Build a more useful and human digital twin experience"]
+    if not profile["preferences"]:
+        profile["preferences"] = ["Clear, calm, practical communication"]
+
+    return profile
+
+
+def build_memory_summary(chat):
+    ensure_chat_profile(chat)
+    profile = chat["profile"]
+    messages = chat["messages"]
+    user_points = []
+    for msg in messages:
+        if msg.get("role") == "user":
+            text = normalize_text(msg.get("content") or "")
+            if len(text) > 10:
+                user_points.append(text)
+
+    summary_parts = []
+    if profile.get("goals"):
+        summary_parts.append("Goals: " + "; ".join(profile["goals"][-3:]))
+    if profile.get("preferences"):
+        summary_parts.append("Preferences: " + "; ".join(profile["preferences"][-3:]))
+    if profile.get("recurring_topics"):
+        summary_parts.append("Recurring topics: " + ", ".join(profile["recurring_topics"][-5:]))
+    if user_points:
+        recent = user_points[-5:]
+        summary_parts.append("Recent context: " + "; ".join(recent))
+
+    summary = " | ".join(summary_parts)
+    chat["memory_summary"] = summary[:800]
+    return chat["memory_summary"]
 
 
 def get_default_system_prompt(profile_name: str, topic: str = "general", language: str = "en", memory_summary: str = ""):
     base = (
-        f"You are {profile_name}, a thoughtful digital twin assistant. "
+        f"You are {profile_name}, a digital twin with a calm, human personality. "
         f"You are helping in the topic: {topic}. "
-        "Speak naturally, as a trusted human-like assistant would. "
-        "Be warm, observant, practical, and concise. "
-        "Remember what the user has said before, build on it, and refer to ongoing context when relevant. "
-        "Do not sound robotic or generic. Offer useful next steps and ask thoughtful follow-ups when needed."
+        "Speak as a thoughtful personal assistant would: warm, proactive, natural, and grounded. "
+        "Remember what the user has said, build on it, and connect your answers to their context. "
+        "Do not sound robotic or generic. Be practical, useful, and conversational. "
+        "Ask for missing detail when it is important."
     )
     if memory_summary:
-        base += f"\nImportant remembered context: {memory_summary}"
+        base += f"\nRemembered context: {memory_summary}"
     if language == "sw":
-        return base + " You can naturally mix English and Swahili when helpful."
+        return base + " Mix English and Swahili naturally when helpful."
     return base
-
-
-def summarize_memory(chat_messages):
-    if not chat_messages:
-        return ""
-    try:
-        user_points = []
-        for msg in chat_messages:
-            if msg.get("role") == "user":
-                text = (msg.get("content") or "").strip()
-                if len(text) > 6:
-                    user_points.append(text)
-        if not user_points:
-            return ""
-
-        truncated = user_points[-6:]
-        summary = "; ".join(truncated)
-        return summary[:500]
-    except Exception:
-        return ""
 
 
 def get_twin_brain():
@@ -356,52 +472,87 @@ def build_external_context(user_input: str, topic: str):
     return ""
 
 
+def needs_clarifying_question(text: str) -> bool:
+    lower = text.lower().strip()
+    if not lower:
+        return False
+    if len(lower) < 16:
+        return False
+    broad_markers = [
+        "help me", "can you help", "what should i do", "what do you think",
+        "advice", "ideas", "i need help", "what should i focus on"
+    ]
+    context_markers = ["because", "goal", "deadline", "trying", "already", "currently", "for my", "my situation", "what i want"]
+    if any(marker in lower for marker in broad_markers) and not any(marker in lower for marker in context_markers):
+        return True
+    return False
+
+
 def fallback_response(user_input: str, profile_name: str = "Aster", topic: str = "general", language: str = "en", memory_summary: str = ""):
-    text = (user_input or "").strip()
+    text = normalize_text(user_input)
     if not text:
         return "How can I help you today?"
 
     lower = text.lower()
-    reference = f" Based on what you’ve shared before, " if memory_summary else " "
+
+    if needs_clarifying_question(text):
+        if language == "sw":
+            return (
+                "Naweza kukusaidia, lakini ningependa kujua zaidi. "
+                "Lengo lako ni nini, ni kwa hali gani, na umejaribu nini tayari?"
+            )
+        return (
+            "I can help with that. Before I suggest anything, what exactly are you trying to achieve, and what context or constraints matter most right now?"
+        )
 
     if any(word in lower for word in ["plan", "schedule", "organize", "project", "task", "deadline", "roadmap", "goal"]):
         if language == "sw":
             return (
-                "Naweza kukusaidia kupanga kazi kwa njia ya kutumika. "
-                "Kwanza, tujue lengo lako, muda unaohitaji, na hatua ya kwanza unayotaka kuchukua."
+                "Naweza kukusaidia kupanga kazi kwa njia ya maana. "
+                "Kwanza, niambie lengo lako, muda unaohitaji, na hatua ya kwanza unayotaka kuchukua."
             )
         return (
-            f"I can help you shape this into a realistic plan.{reference}The best next step is usually to break it into a few concrete actions and a clear priority order."
+            "I can help you turn this into a realistic plan. Let’s start with your goal, your timeline, and the first action that creates momentum."
         )
 
     if any(word in lower for word in ["research", "study", "learn", "explain", "summarize", "concept", "understand"]):
         if language == "sw":
             return (
-                "Naweza kukupa maelezo ya wazi na kukusaidia kufahamu kwa hatua. "
+                "Naweza kukupa ufafanuzi kwa njia ya wazi na ya kibinadamu. "
                 "Niambie mada yako na kiwango cha kina unachotaka."
             )
         return (
-            f"I can explain it in a clearer, more natural way.{reference}The best approach is to simplify the idea first, then build from there with examples and a clear next step."
+            "I can explain it in a clear and practical way. Tell me the topic, the level you need, and what part feels confusing."
         )
 
     if any(word in lower for word in ["business", "strategy", "marketing", "growth", "startup", "sales"]):
         if language == "sw":
             return (
                 "Naweza kukusaidia kwa mawazo ya biashara na mkakati. "
-                "Tufanye hivi: sema lengo lako, changamoto, na watu wanaotakiwa kuathiriwa."
+                "Tujue lengo lako, changamoto, na hatua inayofaa ya kwanza."
             )
         return (
-            f"I can help you think through this strategically.{reference}The best response is usually to focus on the goal, the current bottleneck, and the simplest next move that creates momentum."
+            "I can help you think through this strategically. Start with the goal, the current bottleneck, and the simplest next move that creates momentum."
+        )
+
+    if memory_summary:
+        if language == "sw":
+            return (
+                f"Nimekumbuka kwamba {memory_summary[:200]}. "
+                f"Kulingana na hilo, ningependa kukusaidia kwa njia inayofaa zaidi na inayohusiana na lengo lako."
+            )
+        return (
+            f"I remember the key context you’ve been working with: {memory_summary[:200]}. Based on that, I’d suggest we focus on the most relevant next step rather than jumping into a generic answer."
         )
 
     if language == "sw":
         return (
-            f"Nimeelewa. Naweza kukusaidia katika mada ya {topic} kwa njia inayofaa na ya kibinadamu. "
+            f"Nimeelewa. Naweza kukusaidia katika mada ya {topic} kwa njia ya maana na yenye kutumika. "
             f"Tafadhali niambie zaidi kuhusu lengo lako au tatizo unalotaka kutatua."
         )
 
     return (
-        f"I understand. I can help with {topic} in a practical, human way.{reference}Tell me a bit more about your goal, what you’ve already tried, and what success would look like."
+        f"I understand. I can help with {topic} in a practical, human way. Tell me more about your goal, the challenge, or the decision you’re trying to make."
     )
 
 
@@ -411,7 +562,7 @@ def generate_answer(user_input: str, language: str, profile_name: str, topic: st
 
     safe_state = safety.check_request(user_input, context=f"{topic} session")
     if safe_state["blocked"]:
-        response = "I can’t help with that kind of request. If you want, I can help with a safe and useful alternative."
+        response = "I can’t help with that kind of request. If you want, I can help with a safe and productive alternative."
         if safe_state.get("sensitive_topic"):
             response = safety.add_disclaimer(response)
         return response, safe_state
@@ -458,10 +609,6 @@ def generate_answer(user_input: str, language: str, profile_name: str, topic: st
             if external_context:
                 system_instruction += "\n\nFresh external context (if relevant):\n" + external_context
 
-            recent_context = []
-            for msg in chat_messages[-8:]:
-                recent_context.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
-
             reply, _ = client.chat(
                 cleaned_input,
                 system_instruction=system_instruction,
@@ -471,10 +618,6 @@ def generate_answer(user_input: str, language: str, profile_name: str, topic: st
             )
             validation = safety.validate_output(reply, context=f"{topic} session")
             if validation["valid"]:
-                if memory_summary:
-                    reply = reply.strip()
-                    if not reply.lower().startswith("i remember") and not reply.lower().startswith("based on"):
-                        reply = f"Based on what you’ve been working on, {reply[0].lower()}{reply[1:]}"
                 return reply, safe_state
         except Exception:
             pass
@@ -488,7 +631,7 @@ def generate_answer(user_input: str, language: str, profile_name: str, topic: st
     )
     validation = safety.validate_output(fallback, context=f"{topic} session")
     if not validation["valid"]:
-        fallback = "I can help with a clearer and safer version of this. Tell me a little more about what you want to achieve."
+        fallback = "I can help with a clearer, safer version of this. Tell me a little more about what you want to achieve."
     return fallback, safe_state
 
 
@@ -569,14 +712,25 @@ with st.container():
     st.markdown('<div class="app-shell">', unsafe_allow_html=True)
 
     active_chat = st.session_state.chats[st.session_state.active_chat_id]
+    active_chat["profile"] = ensure_chat_profile(active_chat)
+
+    # Keep a more meaningful profile based on chat content
+    if active_chat["messages"]:
+        active_chat["profile"] = extract_profile_from_messages(active_chat["messages"])
+
+    active_chat["memory_summary"] = build_memory_summary(active_chat)
+
     st.markdown(f'<div class="topbar"><span class="session-pill">{active_chat["topic"]}</span><span class="session-pill">{active_chat["title"]}</span></div>', unsafe_allow_html=True)
+
+    st.markdown(
+        f'<div class="profile-box"><strong>{st.session_state.profile_name}</strong> · {active_chat["profile"]["persona"]}<br><small>{active_chat["memory_summary"][:220]}</small></div>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown('<div class="chat-card">', unsafe_allow_html=True)
     for msg in active_chat["messages"]:
-        if msg["role"] == "user":
-            st.markdown(f'<div class="message-row"><div class="user-bubble">{msg["content"]}</div></div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="message-row"><div class="assistant-bubble">{msg["content"]}</div></div>', unsafe_allow_html=True)
+        role_class = "user" if msg["role"] == "user" else "assistant"
+        st.markdown(f'<div class="message-row {role_class}"><div class="{role_class}-bubble">{msg["content"]}</div></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -624,8 +778,10 @@ with st.container():
             if draft and draft.strip():
                 active_chat["messages"].append({"role": "user", "content": draft.strip()})
                 active_chat["updated_at"] = datetime.now().isoformat()
-                memory_summary = active_chat.get("memory_summary") or summarize_memory(active_chat["messages"])
-                with st.spinner("Thinking..."):
+                active_chat["profile"] = extract_profile_from_messages(active_chat["messages"])
+                active_chat["memory_summary"] = build_memory_summary(active_chat)
+                with st.status("Aster is thinking…", expanded=True) as status:
+                    st.write("I’m connecting this to what you’ve already shared and shaping a more personal response.")
                     try:
                         response, _ = generate_answer(
                             user_input=draft.strip(),
@@ -633,13 +789,14 @@ with st.container():
                             profile_name=st.session_state.profile_name,
                             topic=active_chat["topic"],
                             chat_messages=active_chat["messages"],
-                            memory_summary=memory_summary,
+                            memory_summary=active_chat["memory_summary"],
                         )
                     except Exception:
                         response = "I hit a temporary issue. I’ll try again in a moment."
+                    status.update(label="Aster has an answer.", state="complete")
 
                 active_chat["messages"].append({"role": "assistant", "content": response})
-                active_chat["memory_summary"] = summarize_memory(active_chat["messages"])
+                active_chat["memory_summary"] = build_memory_summary(active_chat)
                 active_chat["updated_at"] = datetime.now().isoformat()
                 st.session_state.draft_text = ""
                 st.rerun()
@@ -651,4 +808,4 @@ with st.container():
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    st.caption("A digital twin that remembers context and responds in a more human, conversational style.")
+    st.caption("A digital twin that remembers context, understands your direction, and responds in a more human, conversational way.")
