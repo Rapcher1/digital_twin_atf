@@ -34,3 +34,4 @@ def fetch_web_summary(query: str, max_chars: int = 800):
         return ""
     except Exception:
         return ""
+        
