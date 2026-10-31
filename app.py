@@ -52,139 +52,212 @@ except Exception:
     def fetch_web_summary(query: str, max_chars: int = 800):
         return ""
 
-STYLES = """
-<style>
-    :root {
-        --bg: #07111f;
-        --panel: #0d1729;
-        --panel-2: #111d2f;
-        --panel-3: #17263d;
-        --text: #edf5ff;
-        --muted: #a7bdd7;
-        --accent: #7dd3fc;
-        --accent-2: #38bdf8;
-        --line: #243247;
-        --success: #22c55e;
-        --warning: #fbbf24;
-        --danger: #ef4444;
-        --input: #0b1320;
-        --chat-user: #13304c;
-        --chat-assistant: #111827;
-    }
+safety = DigitalTwinSafetySystem()
+DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 
+DARK_CSS = """
+<style>
     html, body, [data-testid="stAppViewContainer"], .stApp {
-        background: var(--bg) !important;
-        color: var(--text) !important;
+        background: #061018 !important;
+        color: #eaf5ff !important;
+        font-family: "Inter", "Segoe UI", sans-serif;
     }
 
     div[data-testid="stSidebar"] {
-        background: #091521 !important;
-        border-right: 1px solid var(--line) !important;
+        background: #091824 !important;
+        border-right: 1px solid #1b2c3f !important;
     }
 
-    .stApp .stChatMessage {
-        background: transparent !important;
+    .app-shell {
+        max-width: 950px;
+        margin: 0 auto;
+        padding: 14px 14px 24px;
+    }
+
+    .topbar {
+        background: rgba(15, 23, 42, 0.7);
+        border: 1px solid #233247;
+        border-radius: 18px;
+        padding: 12px 16px;
+        margin-bottom: 14px;
+    }
+
+    .chat-card {
+        background: #0d1724;
+        border: 1px solid #1f2f41;
+        border-radius: 18px;
+        padding: 10px 12px;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.12);
+    }
+
+    .message-row {
+        margin: 0 0 12px 0;
+    }
+
+    .user-bubble {
+        background: linear-gradient(135deg, #0f4c81, #1f7ad0);
+        color: #f3fbff;
+        border-radius: 18px 18px 6px 18px;
+        padding: 12px 14px;
+        max-width: 78%;
+        margin-left: auto;
+        box-shadow: 0 8px 16px rgba(20, 63, 113, 0.25);
+    }
+
+    .assistant-bubble {
+        background: #102030;
+        border: 1px solid #21384d;
+        color: #ebf7ff;
+        border-radius: 18px 18px 18px 6px;
+        padding: 12px 14px;
+        max-width: 82%;
+        margin-right: auto;
+        box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+    }
+
+    .meta {
+        color: #a7bfd3;
+        font-size: 0.74rem;
+    }
+
+    .session-pill {
+        background: #101e2d;
+        border: 1px solid #243548;
+        border-radius: 999px;
+        padding: 8px 14px;
+        color: #dfeefb;
+        display: inline-block;
+        font-size: 0.8rem;
+        margin-right: 8px;
     }
 
     .stTextInput > div > div > input,
     .stTextArea > div > div > textarea,
-    .stChatInput textarea,
     .stSelectbox > div > div,
-    .stSelectbox > div > div > div,
-    .stNumberInput > div > div > input, 
-    .stDateInput > div > div > input {
-        background: var(--input) !important;
-        color: var(--text) !important;
-        border: 1px solid var(--line) !important;
+    .stButton > button,
+    .stDownloadButton > button {
+        background: #0d1726 !important;
+        color: #edf6ff !important;
+        border: 1px solid #243247 !important;
         border-radius: 12px !important;
         box-shadow: none !important;
     }
 
     .stChatInput textarea {
-        min-height: 58px !important;
-        color: var(--text) !important;
+        background: #0d1726 !important;
+        color: #edf6ff !important;
+        border: 1px solid #243247 !important;
+        min-height: 68px !important;
+        border-radius: 14px !important;
     }
 
-    .stButton > button {
-        border-radius: 12px !important;
-        color: var(--text) !important;
-        background: #122033 !important;
-        border: 1px solid var(--line) !important;
-    }
-
-    .stButton > button:hover {
-        border-color: var(--accent) !important;
-        color: white !important;
-    }
-
-    .stDownloadButton > button {
-        background: #122033 !important;
-        color: var(--text) !important;
-        border: 1px solid var(--line) !important;
-    }
-
-    .panel {
-        background: var(--panel) !important;
-        border: 1px solid var(--line) !important;
-        border-radius: 16px !important;
-        padding: 14px !important;
-        color: var(--text) !important;
-    }
-
-    .soft-card {
-        background: var(--panel-2) !important;
-        border: 1px solid var(--line) !important;
-        border-radius: 12px !important;
-        padding: 10px 12px !important;
-        color: var(--text) !important;
-    }
-
-    .metric-box {
-        background: var(--panel-2) !important;
-        border: 1px solid var(--line) !important;
-        border-radius: 12px !important;
-        padding: 12px !important;
-    }
-
-    .label-text {
-        color: var(--muted) !important;
-    }
-
-    .stChatMessage[data-testid="stChatMessage"] {
-        background: transparent !important;
-    }
-
-    .stChatMessage [data-testid="chat-message-content"] {
-        background: transparent !important;
-        color: var(--text) !important;
-    }
-
-    .stChatMessage [data-testid="chat-avatar"] {
-        background: linear-gradient(135deg, #38bdf8, #0ea5e9) !important;
-        color: white !important;
-    }
-
-    .stMarkdown {
-        color: var(--text) !important;
+    .stButton > button:hover,
+    .stDownloadButton > button:hover {
+        border-color: #7dd3fc !important;
+        color: #ffffff !important;
     }
 
     .stMarkdown p, .stMarkdown li, .stMarkdown div {
-        color: var(--text) !important;
-    }
-
-    .stDataFrame, .stTable {
-        background: var(--panel) !important;
+        color: #edf6ff !important;
     }
 </style>
 """
 
-st.set_page_config(page_title="Digital Twin Workspace", page_icon="🧠", layout="wide")
+LIGHT_CSS = """
+<style>
+    html, body, [data-testid="stAppViewContainer"], .stApp {
+        background: #f2f6fb !important;
+        color: #0f172a !important;
+        font-family: "Inter", "Segoe UI", sans-serif;
+    }
 
-safety = DigitalTwinSafetySystem()
-DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+    div[data-testid="stSidebar"] {
+        background: #e8eef8 !important;
+        border-right: 1px solid #dfeaf7 !important;
+    }
 
-# apply the dark styling globally
-st.markdown(STYLES, unsafe_allow_html=True)
+    .app-shell {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 14px 10px 28px;
+    }
+
+    .topbar {
+        background: #ffffff;
+        border: 1px solid #dfeaf7;
+        border-radius: 18px;
+        padding: 12px 16px;
+        margin-bottom: 14px;
+    }
+
+    .chat-card {
+        background: #ffffff;
+        border: 1px solid #e2ebf5;
+        border-radius: 18px;
+        padding: 10px 12px;
+        box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);
+    }
+
+    .user-bubble {
+        background: linear-gradient(135deg, #1d4ed8, #2563eb);
+        color: #ffffff;
+        border-radius: 18px 18px 6px 18px;
+        padding: 12px 14px;
+        max-width: 78%;
+        margin-left: auto;
+    }
+
+    .assistant-bubble {
+        background: #f6f9fc;
+        border: 1px solid #e3edf8;
+        color: #0f172a;
+        border-radius: 18px 18px 18px 6px;
+        padding: 12px 14px;
+        max-width: 82%;
+        margin-right: auto;
+    }
+
+    .meta {
+        color: #5c728b;
+        font-size: 0.74rem;
+    }
+
+    .session-pill {
+        background: #edf4ff;
+        border: 1px solid #d9e8ff;
+        border-radius: 999px;
+        padding: 8px 14px;
+        color: #1e3a8a;
+        display: inline-block;
+        font-size: 0.8rem;
+        margin-right: 8px;
+    }
+
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea,
+    .stSelectbox > div > div,
+    .stButton > button,
+    .stDownloadButton > button {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border: 1px solid #d5dfeb !important;
+        border-radius: 12px !important;
+        box-shadow: none !important;
+    }
+
+    .stChatInput textarea {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border: 1px solid #d5dfeb !important;
+        min-height: 68px !important;
+        border-radius: 14px !important;
+    }
+
+    .stMarkdown p, .stMarkdown li, .stMarkdown div {
+        color: #0f172a !important;
+    }
+</style>
+"""
 
 
 def default_chat_payload(title="New conversation", topic="general"):
@@ -192,42 +265,72 @@ def default_chat_payload(title="New conversation", topic="general"):
         "id": f"chat-{uuid.uuid4().hex[:8]}",
         "title": title,
         "topic": topic,
-        "messages": [
-            {
-                "role": "assistant",
-                "content": "Hello! I’m your digital twin assistant. Ask me anything, refine an idea, plan your work, research a topic, or organize your next move."
-            }
-        ],
+        "messages": [{
+            "role": "assistant",
+            "content": "Hi — I’m your digital twin. I remember what matters to you, and I’ll keep it in context as we talk."
+        }],
         "updated_at": datetime.now().isoformat(),
+        "memory_summary": "The user is building a digital twin assistant and wants a conversational, human-style experience.",
     }
 
 
-def get_default_system_prompt(profile_name: str, topic: str = "general", language: str = "en"):
+def get_default_system_prompt(profile_name: str, topic: str = "general", language: str = "en", memory_summary: str = ""):
     base = (
-        f"You are {profile_name}, a calm, capable, and personable digital twin assistant. "
+        f"You are {profile_name}, a thoughtful digital twin assistant. "
         f"You are helping in the topic: {topic}. "
-        "You are not a generic bot. You are thoughtful, conversational, warm, and practical. "
-        "Speak naturally, with a human tone, and keep responses useful and easy to follow. "
-        "Ask clarifying questions when needed, stay honest about uncertainty, and avoid robotic phrasing. "
-        "Keep the answer structured when useful, but still sound like a real assistant talking to a person."
+        "Speak naturally, as a trusted human-like assistant would. "
+        "Be warm, observant, practical, and concise. "
+        "Remember what the user has said before, build on it, and refer to ongoing context when relevant. "
+        "Do not sound robotic or generic. Offer useful next steps and ask thoughtful follow-ups when needed."
     )
+    if memory_summary:
+        base += f"\nImportant remembered context: {memory_summary}"
     if language == "sw":
-        return base + " Use English and Swahili naturally when helpful."
+        return base + " You can naturally mix English and Swahili when helpful."
     return base
 
 
-def get_twin_client():
-    if not USE_REAL_TWIN or GroqClient is None:
-        return None
+def summarize_memory(chat_messages):
+    if not chat_messages:
+        return ""
     try:
-        cm = ContextWindowManager(max_tokens=8192, reserve_for_response=512)
-        return GroqClient(
-            api_key=os.environ.get("GROQ_API_KEY", ""),
-            model=os.environ.get("GROQ_MODEL", DEFAULT_GROQ_MODEL),
-            context_manager=cm,
-        )
+        user_points = []
+        for msg in chat_messages:
+            if msg.get("role") == "user":
+                text = (msg.get("content") or "").strip()
+                if len(text) > 6:
+                    user_points.append(text)
+        if not user_points:
+            return ""
+
+        truncated = user_points[-6:]
+        summary = "; ".join(truncated)
+        return summary[:500]
     except Exception:
-        return None
+        return ""
+
+
+def get_twin_brain():
+    if DigitalTwinBrain is not None:
+        try:
+            return DigitalTwinBrain(
+                api_key=os.environ.get("GROQ_API_KEY", ""),
+                model=os.environ.get("GROQ_MODEL", DEFAULT_GROQ_MODEL),
+            )
+        except Exception:
+            pass
+
+    if USE_REAL_TWIN and GroqClient is not None and ContextWindowManager is not None:
+        try:
+            return DigitalTwinBrain(
+                api_key=os.environ.get("GROQ_API_KEY", ""),
+                model=os.environ.get("GROQ_MODEL", DEFAULT_GROQ_MODEL),
+                context_manager=ContextWindowManager(max_tokens=8192, reserve_for_response=512),
+            )
+        except Exception:
+            pass
+
+    return None
 
 
 def build_external_context(user_input: str, topic: str):
@@ -253,108 +356,142 @@ def build_external_context(user_input: str, topic: str):
     return ""
 
 
-def fallback_response(user_input: str, profile_name: str = "Aster", topic: str = "general", language: str = "en"):
+def fallback_response(user_input: str, profile_name: str = "Aster", topic: str = "general", language: str = "en", memory_summary: str = ""):
     text = (user_input or "").strip()
     if not text:
         return "How can I help you today?"
 
     lower = text.lower()
+    reference = f" Based on what you’ve shared before, " if memory_summary else " "
 
-    if any(word in lower for word in ["plan", "schedule", "organize", "project", "task", "roadmap", "deadline"]):
+    if any(word in lower for word in ["plan", "schedule", "organize", "project", "task", "deadline", "roadmap", "goal"]):
         if language == "sw":
             return (
-                f"Naweza kukusaidia kupanga kazi kwa njia inayofaa. "
-                f"Tafadhali niambie lengo lako, muda uliopo, na hatua za kwanza unazotaka kukitengeneza."
+                "Naweza kukusaidia kupanga kazi kwa njia ya kutumika. "
+                "Kwanza, tujue lengo lako, muda unaohitaji, na hatua ya kwanza unayotaka kuchukua."
             )
         return (
-            f"I can help structure this into a realistic plan. "
-            f"Tell me your goal, the time you have, and the first steps you want to take."
+            f"I can help you shape this into a realistic plan.{reference}The best next step is usually to break it into a few concrete actions and a clear priority order."
         )
 
     if any(word in lower for word in ["research", "study", "learn", "explain", "summarize", "concept", "understand"]):
         if language == "sw":
             return (
-                "Naweza kukupa ufafanuzi wa wazi, kufupisha habari, au kukusaidia kuelewa dhana kwa hatua. "
-                "Tafadhali niambie mada yako na kiwango cha kina unachotaka."
+                "Naweza kukupa maelezo ya wazi na kukusaidia kufahamu kwa hatua. "
+                "Niambie mada yako na kiwango cha kina unachotaka."
             )
         return (
-            "I can help explain the concept clearly, summarize the material, and guide you through it step by step. "
-            "Tell me the topic and the depth you want."
+            f"I can explain it in a clearer, more natural way.{reference}The best approach is to simplify the idea first, then build from there with examples and a clear next step."
         )
 
-    if any(word in lower for word in ["business", "marketing", "strategy", "sales", "growth", "startup"]):
+    if any(word in lower for word in ["business", "strategy", "marketing", "growth", "startup", "sales"]):
         if language == "sw":
             return (
                 "Naweza kukusaidia kwa mawazo ya biashara na mkakati. "
-                "Niambie lengo lako, changamoto yako, na jinsi unavyotaka kukua."
+                "Tufanye hivi: sema lengo lako, changamoto, na watu wanaotakiwa kuathiriwa."
             )
         return (
-            "I can help with business thinking, strategy, and practical next steps. "
-            "Tell me what you are trying to achieve and what challenge you are facing."
+            f"I can help you think through this strategically.{reference}The best response is usually to focus on the goal, the current bottleneck, and the simplest next move that creates momentum."
         )
 
     if language == "sw":
         return (
-            f"Nimeelewa. Naweza kukusaidia kwenye mada ya {topic} kwa njia ya kutumia akili na maelekezo yenye maana. "
+            f"Nimeelewa. Naweza kukusaidia katika mada ya {topic} kwa njia inayofaa na ya kibinadamu. "
             f"Tafadhali niambie zaidi kuhusu lengo lako au tatizo unalotaka kutatua."
         )
 
     return (
-        f"I understand. I can help with the topic of {topic} in a practical and thoughtful way. "
-        f"Tell me more about your goal, question, or the decision you are trying to make."
+        f"I understand. I can help with {topic} in a practical, human way.{reference}Tell me a bit more about your goal, what you’ve already tried, and what success would look like."
     )
 
 
-def generate_answer(user_input: str, language: str, profile_name: str, topic: str, chat_history=None):
+def generate_answer(user_input: str, language: str, profile_name: str, topic: str, chat_messages=None, memory_summary: str = ""):
     if not user_input or not user_input.strip():
         return "Please type a message so I can help.", {"blocked": False, "reasons": []}
 
     safe_state = safety.check_request(user_input, context=f"{topic} session")
     if safe_state["blocked"]:
-        response = "I can’t assist with that kind of request. If you want, I can help with a safe and productive alternative."
+        response = "I can’t help with that kind of request. If you want, I can help with a safe and useful alternative."
         if safe_state.get("sensitive_topic"):
             response = safety.add_disclaimer(response)
         return response, safe_state
 
     cleaned_input = safety.redact_input(user_input)
     external_context = build_external_context(cleaned_input, topic)
+    chat_messages = chat_messages or []
 
-    client = get_twin_client()
-    api_key = os.environ.get("GROQ_API_KEY", "")
-
-    if client is not None and api_key:
+    brain = get_twin_brain()
+    if brain is not None:
         try:
-            system_instruction = get_default_system_prompt(profile_name, topic, language)
+            result = brain.route(
+                user_message=cleaned_input,
+                profile_name=profile_name,
+                topic=topic,
+                language=language,
+                external_context=external_context,
+                chat_history=chat_messages,
+                memory_summary=memory_summary,
+            )
+            if result:
+                reply = result.get("reply") or result.get("response") or ""
+                if reply:
+                    validation = safety.validate_output(reply, context=f"{topic} session")
+                    if validation["valid"]:
+                        return reply, safe_state
+        except Exception:
+            pass
+
+    client = None
+    if USE_REAL_TWIN and GroqClient is not None and ContextWindowManager is not None:
+        try:
+            client = GroqClient(
+                api_key=os.environ.get("GROQ_API_KEY", ""),
+                model=os.environ.get("GROQ_MODEL", DEFAULT_GROQ_MODEL),
+                context_manager=ContextWindowManager(max_tokens=8192, reserve_for_response=512),
+            )
+        except Exception:
+            client = None
+
+    if client is not None and os.environ.get("GROQ_API_KEY", ""):
+        try:
+            system_instruction = get_default_system_prompt(profile_name, topic, language, memory_summary)
             if external_context:
                 system_instruction += "\n\nFresh external context (if relevant):\n" + external_context
 
-            reply, usage = client.chat(
+            recent_context = []
+            for msg in chat_messages[-8:]:
+                recent_context.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+
+            reply, _ = client.chat(
                 cleaned_input,
                 system_instruction=system_instruction,
                 temperature=0.35,
                 max_tokens=350,
                 context_strategy="sliding_window",
             )
-
             validation = safety.validate_output(reply, context=f"{topic} session")
-            if not validation["valid"]:
-                reply = "I can help with a safer, more practical version of that. Tell me a bit more about what you need."
-
-            return reply, safe_state
+            if validation["valid"]:
+                if memory_summary:
+                    reply = reply.strip()
+                    if not reply.lower().startswith("i remember") and not reply.lower().startswith("based on"):
+                        reply = f"Based on what you’ve been working on, {reply[0].lower()}{reply[1:]}"
+                return reply, safe_state
         except Exception:
             pass
 
-    fallback = fallback_response(cleaned_input, profile_name=profile_name, topic=topic, language=language)
+    fallback = fallback_response(
+        cleaned_input,
+        profile_name=profile_name,
+        topic=topic,
+        language=language,
+        memory_summary=memory_summary,
+    )
     validation = safety.validate_output(fallback, context=f"{topic} session")
     if not validation["valid"]:
-        fallback = "I can help with a clearer and safer version of this. Give me a bit more context."
-
+        fallback = "I can help with a clearer and safer version of this. Tell me a little more about what you want to achieve."
     return fallback, safe_state
 
 
-# ---------------------------------
-# Session state setup
-# ---------------------------------
 def init_session():
     if "chats" not in st.session_state:
         st.session_state.chats = {
@@ -373,20 +510,22 @@ def init_session():
     if "theme" not in st.session_state:
         st.session_state.theme = "dark"
 
-    if "pending_prompt" not in st.session_state:
-        st.session_state.pending_prompt = ""
+    if "draft_text" not in st.session_state:
+        st.session_state.draft_text = ""
 
     if "rename_value" not in st.session_state:
         st.session_state.rename_value = ""
 
 init_session()
 
-# ---------------------------------
-# Sidebar
-# ---------------------------------
+if st.session_state.theme == "dark":
+    st.markdown(DARK_CSS, unsafe_allow_html=True)
+else:
+    st.markdown(LIGHT_CSS, unsafe_allow_html=True)
+
 with st.sidebar:
-    st.title("🧠 Digital Twin")
-    st.caption("General-purpose AI workspace")
+    st.title("🧠 Twin")
+    st.caption("Personal digital twin")
 
     if st.button("+ New chat", use_container_width=True):
         new_id = f"chat-{uuid.uuid4().hex[:8]}"
@@ -394,32 +533,28 @@ with st.sidebar:
         st.session_state.active_chat_id = new_id
         st.rerun()
 
-    with st.container():
-        st.markdown("### Conversations")
-        for chat_id, chat in st.session_state.chats.items():
-            active = chat_id == st.session_state.active_chat_id
-            label = f"{chat['title']} • {chat['topic']}"
-            if st.button(label, key=f"chat_{chat_id}", use_container_width=True, type="primary" if active else "secondary"):
-                st.session_state.active_chat_id = chat_id
-                st.rerun()
+    st.markdown("### Chats")
+    for chat_id, chat in st.session_state.chats.items():
+        active = chat_id == st.session_state.active_chat_id
+        label = f"{chat['title']} • {chat['topic']}"
+        if st.button(label, key=f"chat_{chat_id}", use_container_width=True, type="primary" if active else "secondary"):
+            st.session_state.active_chat_id = chat_id
+            st.rerun()
 
     st.markdown("---")
-    st.markdown("### Settings")
     st.selectbox("Language", ["en", "sw"], index=0 if st.session_state.language == "en" else 1, key="language")
     st.text_input("Profile name", key="profile_name")
     st.radio("Theme", ["dark", "light"], index=0 if st.session_state.theme == "dark" else 1, key="theme")
 
-    with st.expander("Conversation settings"):
-        if st.session_state.chats:
-            current = st.session_state.chats[st.session_state.active_chat_id]
-            st.text_input("Rename chat", value=current["title"], key="rename_value")
-            if st.button("Apply rename", use_container_width=True):
-                current["title"] = (st.session_state.rename_value or "New conversation").strip() or "New conversation"
-                st.rerun()
+    with st.expander("Chat controls"):
+        current = st.session_state.chats[st.session_state.active_chat_id]
+        st.text_input("Rename this chat", value=current["title"], key="rename_value")
+        if st.button("Apply rename", use_container_width=True):
+            current["title"] = (st.session_state.rename_value or "New conversation").strip() or "New conversation"
+            st.rerun()
 
-        st.text_input("Current topic", key="topic_override")
+        st.text_input("Topic", key="topic_override")
         if st.button("Apply topic", use_container_width=True):
-            current = st.session_state.chats[st.session_state.active_chat_id]
             current["topic"] = (st.session_state.topic_override or current["topic"]).strip() or current["topic"]
             st.rerun()
 
@@ -430,137 +565,90 @@ with st.sidebar:
         mime="application/json",
     )
 
-# ---------------------------------
-# Dark UI update based on theme
-# ---------------------------------
-if st.session_state.theme == "dark":
-    st.markdown(STYLES, unsafe_allow_html=True)
-else:
-    st.markdown(
-        """
-        <style>
-        html, body, [data-testid="stAppViewContainer"], .stApp {
-            background: #f4f7fb !important;
-            color: #0f172a !important;
-        }
-        div[data-testid="stSidebar"] {
-            background: #e5edf7 !important;
-        }
-        .stTextInput > div > div > input,
-        .stTextArea > div > div > textarea,
-        .stChatInput textarea,
-        .stSelectbox > div > div,
-        .stButton > button {
-            background: #f8fafc !important;
-            color: #0f172a !important;
-            border: 1px solid #d7e2ef !important;
-            border-radius: 12px !important;
-        }
-        .stMarkdown, .stMarkdown p, .stMarkdown li { color: #0f172a !important; }
-        </style>
-        """,
-        unsafe_allow_html=True,
+with st.container():
+    st.markdown('<div class="app-shell">', unsafe_allow_html=True)
+
+    active_chat = st.session_state.chats[st.session_state.active_chat_id]
+    st.markdown(f'<div class="topbar"><span class="session-pill">{active_chat["topic"]}</span><span class="session-pill">{active_chat["title"]}</span></div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="chat-card">', unsafe_allow_html=True)
+    for msg in active_chat["messages"]:
+        if msg["role"] == "user":
+            st.markdown(f'<div class="message-row"><div class="user-bubble">{msg["content"]}</div></div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="message-row"><div class="assistant-bubble">{msg["content"]}</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    quick_prompts = {
+        "en": [
+            "Help me plan my week",
+            "Explain a difficult idea simply",
+            "Help me structure a project",
+            "Give me a smart strategy",
+            "Summarize this concept clearly",
+            "What should I focus on next?",
+        ],
+        "sw": [
+            "Nisaidie kupanga wiki yangu",
+            "Fafanua dhana kwa kifupi",
+            "Nisaidie kupanga mradi",
+            "Nipe mkakati mzuri",
+            "Fupisha dhana kwa wazi",
+            "Nini kinapaswa kuzingatiwa kwa hatua inayofuata?",
+        ],
+    }
+
+    cols = st.columns(2)
+    for idx, prompt in enumerate(quick_prompts[st.session_state.language]):
+        with cols[idx % 2]:
+            if st.button(prompt, key=f"quick_{idx}", use_container_width=True):
+                st.session_state.draft_text = prompt
+                st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    draft = st.text_area(
+        "Write a message",
+        value=st.session_state.draft_text,
+        height=120,
+        key="draft_text",
+        label_visibility="visible",
+        placeholder="Tell me what you’re thinking about...",
     )
 
-# ---------------------------------
-# Active chat
-# ---------------------------------
-active_chat = st.session_state.chats[st.session_state.active_chat_id]
+    send_col, clear_col = st.columns([1, 1])
+    with send_col:
+        if st.button("Send", use_container_width=True, type="primary"):
+            if draft and draft.strip():
+                active_chat["messages"].append({"role": "user", "content": draft.strip()})
+                active_chat["updated_at"] = datetime.now().isoformat()
+                memory_summary = active_chat.get("memory_summary") or summarize_memory(active_chat["messages"])
+                with st.spinner("Thinking..."):
+                    try:
+                        response, _ = generate_answer(
+                            user_input=draft.strip(),
+                            language=st.session_state.language,
+                            profile_name=st.session_state.profile_name,
+                            topic=active_chat["topic"],
+                            chat_messages=active_chat["messages"],
+                            memory_summary=memory_summary,
+                        )
+                    except Exception:
+                        response = "I hit a temporary issue. I’ll try again in a moment."
 
-header_col1, header_col2 = st.columns([3, 1])
-with header_col1:
-    st.title(active_chat["title"])
-with header_col2:
-    st.markdown(f"<div class='panel'>Topic: {active_chat['topic']}</div>", unsafe_allow_html=True)
+                active_chat["messages"].append({"role": "assistant", "content": response})
+                active_chat["memory_summary"] = summarize_memory(active_chat["messages"])
+                active_chat["updated_at"] = datetime.now().isoformat()
+                st.session_state.draft_text = ""
+                st.rerun()
 
-for message in active_chat["messages"]:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# Quick prompts
-quick_prompts = {
-    "en": [
-        "Help me plan my week",
-        "Explain a difficult idea simply",
-        "Help me structure a project",
-        "Give me a smart business idea",
-        "Summarize this concept in plain English",
-        "Help me study more effectively",
-    ],
-    "sw": [
-        "Nisaidie kupanga wiki yangu",
-        "Fafanua dhana kwa kifupi na wazi",
-        "Nisaidie kupanga mradi",
-        "Nipe wazo la biashara linalofaa",
-        "Fupisha dhana hii kwa lugha ya kawaida",
-        "Nisaidie kujifunza kwa ufanisi",
-    ],
-}
-
-action_cols = st.columns(2)
-for idx, prompt in enumerate(quick_prompts[st.session_state.language]):
-    with action_cols[idx % 2]:
-        if st.button(prompt, key=f"quick_{idx}", use_container_width=True):
-            st.session_state.pending_prompt = prompt
+    with clear_col:
+        if st.button("Clear", use_container_width=True):
+            st.session_state.draft_text = ""
             st.rerun()
 
-if st.session_state.pending_prompt:
-    user_prompt = st.session_state.pending_prompt
-    st.session_state.pending_prompt = ""
-else:
-    user_prompt = st.chat_input("Ask your digital twin anything...", key="chatinput")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-if user_prompt:
-    active_chat["messages"].append({"role": "user", "content": user_prompt})
-    active_chat["updated_at"] = datetime.now().isoformat()
-
-    with st.spinner("Thinking..."):
-        try:
-            response, safety_state = generate_answer(
-                user_input=user_prompt,
-                language=st.session_state.language,
-                profile_name=st.session_state.profile_name,
-                topic=active_chat["topic"],
-                chat_history=active_chat["messages"],
-            )
-        except Exception:
-            response = "I hit a temporary error. Please try again in a moment or ask a simpler question."
-            safety_state = {"blocked": False, "reasons": ["error"]}
-
-    active_chat["messages"].append({"role": "assistant", "content": response})
-    active_chat["updated_at"] = datetime.now().isoformat()
-    st.rerun()
-
-# Footer info
-with st.container():
-    st.markdown("---")
-    st.caption("General-purpose digital twin with Groq, session memory, and practical conversational responses.")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Chat", active_chat["title"])
-    c2.metric("Topic", active_chat["topic"])
-    c3.metric("Messages", len(active_chat["messages"]))
-
-    if st.button("🎙️ Voice input"):
-        st.components.v1.html(
-            """
-            <script>
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                alert('Voice input is not supported in this browser.');
-                return;
-            }
-            const recognition = new SpeechRecognition();
-            recognition.lang = 'en-US';
-            recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
-                const textInput = document.querySelector('textarea');
-                if (textInput) {
-                    textInput.value = transcript;
-                    textInput.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-            };
-            recognition.start();
-            </script>
-            """,
-            height=120,
-        )
+    st.caption("A digital twin that remembers context and responds in a more human, conversational style.")
