@@ -12,13 +12,18 @@ if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
 try:
-    from twin import GroqClient, ContextWindowManager, DigitalTwinBrain
+    from digital_twin_brain import DigitalTwinBrain
+    from twin import GroqClient, ContextWindowManager
     USE_REAL_TWIN = True
 except Exception:
-    USE_REAL_TWIN = False
-    GroqClient = None
-    ContextWindowManager = None
-    DigitalTwinBrain = None
+    try:
+        from twin import GroqClient, ContextWindowManager, DigitalTwinBrain
+        USE_REAL_TWIN = True
+    except Exception:
+        USE_REAL_TWIN = False
+        GroqClient = None
+        ContextWindowManager = None
+        DigitalTwinBrain = None
 
 try:
     from digital_twin_safety import DigitalTwinSafetySystem
@@ -362,7 +367,6 @@ def extract_profile_from_messages(messages):
         if len(text) > 20:
             facts.append(text)
 
-        # simple topic extraction
         for topic in [
             "project", "business", "study", "planning", "research", "career", "product",
             "strategy", "marketing", "growth", "learning", "work", "personal", "focus"
@@ -714,7 +718,6 @@ with st.container():
     active_chat = st.session_state.chats[st.session_state.active_chat_id]
     active_chat["profile"] = ensure_chat_profile(active_chat)
 
-    # Keep a more meaningful profile based on chat content
     if active_chat["messages"]:
         active_chat["profile"] = extract_profile_from_messages(active_chat["messages"])
 
